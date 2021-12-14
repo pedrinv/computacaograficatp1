@@ -1188,6 +1188,7 @@ void instructions1(){//Instruções se o teclado estiver sendo usado (default)
     char texto7[]="[r] RESTART GAME";
     char texto8[]="[m] RETURN TO START MENU";
     char texto9[]="[1] START GAME / CONTINUE GAME";
+    char texto3[] = "[2] DOUBLE SHOT";
     int unsigned i = 0;
     glColor3f(0,0,1);
     glRasterPos3f(178,400,1);
@@ -1208,19 +1209,25 @@ void instructions1(){//Instruções se o teclado estiver sendo usado (default)
     for(i=0;i<=strlen(texto5);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto5[i]);
     }
-    glRasterPos3f(175, 220,1);
+
+    glRasterPos3f(170, 220, 1);
+
+    for(i = 0; i < strlen(texto3); i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, texto3[i]);
+    }
+    glRasterPos3f(175, 180,1);
     for(i=0;i<=strlen(texto6);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto6[i]);
     }
-    glRasterPos3f(165, 180,1);
+    glRasterPos3f(165, 140, 1);
     for(i=0;i<=strlen(texto7);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto7[i]);
     }
-    glRasterPos3f(113, 140,1);
+    glRasterPos3f(113, 100,1);
     for(i=0;i<=strlen(texto8);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto8[i]);
     }
-    glRasterPos3f(88, 100,1);
+    glRasterPos3f(88,60,1);
     for(i=0;i<=strlen(texto9);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto9[i]);
     }
@@ -1236,6 +1243,7 @@ void instructions2(){//Intruções se o mouse for usado //2 atira double shot
     char texto6[]="[r] RESTART GAME";
     char texto7[]="[m] RETURN TO START MENU";
     char texto8[]="[1] START GAME / CONTINUE GAME";
+    char texto9[] = "[2] DOUBLE SHOT";
 
     int unsigned i = 0;
     glColor3f(0,0,1);
@@ -1256,19 +1264,25 @@ void instructions2(){//Intruções se o mouse for usado //2 atira double shot
     for(i=0;i<=strlen(texto4);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto4[i]);
     }
-    glRasterPos3f(175, 220,1);
+
+    glRasterPos3f(170, 220, 1);
+    for(i = 0; i < strlen(texto9); i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, texto9[i]);
+    }
+
+    glRasterPos3f(175, 180,1);
     for(i=0;i<=strlen(texto5);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto5[i]);
     }
-    glRasterPos3f(165, 180,1);
+    glRasterPos3f(165, 140,1);
     for(i=0;i<=strlen(texto6);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto6[i]);
     }
-    glRasterPos3f(113, 140,1);
+    glRasterPos3f(113, 100,1);
     for(i=0;i<=strlen(texto7);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto7[i]);
     }
-    glRasterPos3f(88, 100,1);
+    glRasterPos3f(88, 60,1);
     for(i=0;i<=strlen(texto8);i++){
         glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto8[i]);
     }

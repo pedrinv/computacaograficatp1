@@ -3,37 +3,30 @@
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
-//#include <SDL2/SDL.h>
+#include <SOIL/SOIL.h>
+#include <string.h>
 //#include <SDL/SDL.h>
-//#include "SDL/SDL_opengl.h"
-//#include "SDL/SDL_image"
+//#include <SDL/SDL_audio.h>
+//#include <SDL/SDL_mixer.h>
 #define DISTANCIA_X 50 //Distancia horizontal inicial entre cada inimigo, considerando a posicao "x" de cada inimigo
 #define DISTANCIA_Y 60 //Distancia vertical inicial entre cada inimigo, considerando a posicao "y" de cada inimigo
 #define NUM_MAX_INIMIGOS 27 //Tem que ser múltiplo de "LINHAS_INIMIGOS"    || NUM_MAX_INIMIGOS / LINHAS_INIMIGOS resulta em quantas colunas de inimigos
 #define LINHAS_INIMIGOS 3 //Quantas linhas de inimigos vai ter
 #define POSICAO_INICIAL_INIMIGOS_Y 450
 #define TAMANHO_MINIMO_INIMIGOS 6
-#define VARIACAO_TAMANHO_INIMIGOS 0.5
+#define VARIACAO_TAMANHO_INIMIGOS 0.2
+#define tempo_animacao_player 10
+#define tempo_animacao_inimigo 70
+#define tempo_animacao_background 12
+#define tempo_opacidade_maxima 50
+#define LARGURA_DO_MUNDO 500
+#define ALTURA_DO_MUNDO 500
 
-/*GLuint loadTexture(const std::string&fileName){
-    SDL_Surface *imagem = IMG_Load(fileName.c_str());
-    SDL_DisplayFormatAlpha(imagem);
-    unsigned object(0);
-    glGenTextures(1, &object);
-    glBindTexture(GL_TEXTURE_2D, object);
+struct Textura {
+    GLuint id;
+    char arquivo[50];
+};
 
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imagem->w, imagem->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, imagem->pixels);
-
-    SDL_FreeSurface(imagem);
-
-    return object;
-}*/
 
 class Posicao{
 public:
@@ -58,6 +51,45 @@ public:
     int jaMoveuParaBaixo;
 };
 
+struct Explosao{
+    float x;
+    float y;
+    int tempo;
+};
+static struct Textura texturas[] = {{0, "nave1.png"}, {0, "nave2.png"}, {0, "nave3.png"}, {0, "nave4.png"}};
+static struct Textura texturas_inimigos[] = {{0, "inimigo1.png"}, {0, "inimigo1.png"}, {0, "inimigo1.png"},  {0, "inimigo1_m.png"}, {0, "inimigo2.png"}, {0, "inimigo2.png"}, {0, "inimigo2.png"}, {0, "inimigo2_m.png"}, {0, "inimigo3.png"}, {0, "inimigo3.png"}, {0, "inimigo3.png"}, {0, "inimigo3_m.png"}};
+static struct Textura texturas_background[] = {{0, "background.png"}, {0, "background1.png"}, {0, "background2.png"}};
+static struct Textura texturas_explosao[] = {{0, "explosao1.png"}, {0, "explosao2.png"}, {0, "explosao3.png"}, {0, "explosao4.png"}, {0, "explosao5.png"}};
+static struct Textura textura_splashscreen[] = {{0, "splashscreen.png"}};
+
+//
+int esc = 0;
+bool splashAtivado = true;
+bool menuAtivado = false;
+bool insAtivado = false;
+bool opAtivado = false;
+bool goAtivado = false;
+bool credAtivado = false;
+bool useMouse = false;
+
+void splashScreen();
+void menuPrincipal();
+void instructions1();
+void instructions2();
+void options();
+void gameOver();
+void credits();
+void telaPause();
+void cheatActivated();
+void cheatDesactivated();
+
+
+//
+GLubyte textura_player_atual = 0;
+GLubyte quantidade_textura_player = 4;
+GLubyte textura_inimigo_atual = 0;
+GLubyte textura_background_atual = 0;
+
 Posicao posicao_player;
 Tamanho tamanho_player;
 Posicao *tiros = (Posicao*) malloc(1 * sizeof (Posicao));
@@ -79,9 +111,55 @@ int tempo_tiro = 300; //Frequência inicial dos tiros dos inimigos
 float variacao_nivel = 1; //velocidade dos tiros_inimigos
 int primeiro_tiro = 0;
 float tamanhoInimigo = 20;
-int frame_atual_player = 0;
-int quantidade_frames_player = 4;
+float vida_player_inicial = 1000;
+float dano_inimigo = 100;
+int pont_fase = 1000;
+int pontuacao = 0;
+int intervalo_tiros = 0;
+bool cheat = false;
+bool isPlayerDead = false;
+int quantidade_letras_trapaca = 0;
+char *trapaca = (char*) malloc(1 * sizeof(char));
+int intervalo_cheat = 0;
 
+//Som
+
+//int volume_musica = 100;
+//int fade_out = 100;
+//Mix_Music *musicMenu = NULL;
+
+//
+
+
+
+
+
+Explosao *explosoes = (Explosao*) malloc(1 * sizeof(Explosao));
+
+GLuint carregaTextura(const char* arquivo){
+    GLuint idTextura = SOIL_load_OGL_texture(arquivo, SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_INVERT_Y);
+    if(idTextura == 0){
+        printf("Erro do SOIL ao corregar %s: '%s'\n", arquivo, SOIL_last_result());
+    }
+    return idTextura;
+}
+
+
+/*void iniciar_musica(char* music){
+    if(!Mix_PlayingMusic()){
+        Mix_OpenAudio(22050, MIX_DEFAULT_FORMAT, 2, 1024);
+        musicMenu = Mix_LoadMUS(music);
+        Mix_VolumeMusic(volume_musica);
+        Mix_PlayMusic(musicMenu, -1);
+    }
+}
+
+
+void parar_musica(){
+    if(Mix_PlayingMusic()){
+        Mix_FadeOutMusic(fade_out);
+    }
+}*/
 
 void cria_tiros_inimigos(){
     quantidade_tiros_inimigos = (quantidade_inimigos - inimigos_mortos); //Vai criar tiros na mesma quantidade dos inimigos vivos
@@ -112,15 +190,18 @@ void cria_tiros_inimigos(){
 }
 
 
+
+
 void inicializa(){
     glClear(GL_COLOR_BUFFER_BIT);
     //glClearColor(1.0, 1.0, 1.0, 1.0);
     glClearColor(0.0, 0.0, 0.0, 0.0);
     quantidade_tiros = 0;
+    quantidade_tiros_inimigos = 0;
     posicao_player.x = 240; //Posicao inicial do jogador
     posicao_player.y = 0;
     tamanho_player.comprimento = 30; //Tamanho do jogador
-    tamanho_player.largura = 10;
+    tamanho_player.largura = 20;
     tamanho_tiros.comprimento = 5; //Tamanho dos tiros
     tamanho_tiros.largura = 2;
     tamanho_inimigos.comprimento = tamanhoInimigo; //Tamanho do inimigo, o qual vai variar com o passar das fases
@@ -168,73 +249,393 @@ void inicializa(){
     tempo = -200;
     primeiro_tiro = 0;
     inimigos_mortos = 0;
+    //glEnable(GL_BLEND);
+    //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    textura_player_atual = 0;
+    textura_inimigo_atual = 0;
+    textura_background_atual = 0;
+    vida_player_inicial = 1000;
+
+    explosoes = (Explosao*) realloc(explosoes, 1 * sizeof(Explosao));
+
 
 }
 
+
+
+
 void desenha(){ //desenha com colisão
-    glClear(GL_COLOR_BUFFER_BIT);
-    glColor3f(0, 0, 1);
+    glMatrixMode(GL_TEXTURE);
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glColor3f(1, 1, 1); //Antes
 
-    //Desenhar jogador
-    glBegin(GL_POLYGON);
-        glVertex3f(posicao_player.x, posicao_player.y, 1);
-        glVertex3f(posicao_player.x + tamanho_player.largura, posicao_player.y, 1);
-        glVertex3f(posicao_player.x + tamanho_player.largura, posicao_player.y + tamanho_player.comprimento, 1);
-        glVertex3f(posicao_player.x, posicao_player.y + tamanho_player.comprimento, 1);
-    glEnd();
+    if(splashAtivado){
+        glClearColor(0, 0, 0, 1);
+        glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, textura_splashscreen[0].id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glPushMatrix();
+        glBegin(GL_POLYGON);
+            glTexCoord2f(0, 0);glVertex3f(0, 0, 1);
+            glTexCoord2f(1, 0);glVertex3f(500, 0, 1);
+            glTexCoord2f(1, 1);glVertex3f(500, 500, 1);
+            glTexCoord2f(0, 1);glVertex3f(0, 500, 1);
+        glEnd();
+        glPopMatrix();
+        glDisable(GL_TEXTURE_2D);
+        splashScreen();
+    }
 
-    //Desenhar tiros
-    //glColor3f(0, 0, 0);
-    glColor3f(1, 1, 1);
-        for(int i = 0; i < quantidade_tiros; i++){
-            //condição para o programa não desenhar o tiro sempre para não perder tanto desempenho
-            if(!tiros[i].y < 500){
-                glBegin(GL_POLYGON);
-                    glVertex3f(tiros[i].x, tiros[i].y, 1);
-                    glVertex3f(tiros[i].x + tamanho_tiros.largura, tiros[i].y, 1);
-                    glVertex3f(tiros[i].x + tamanho_tiros.largura, tiros[i].y + tamanho_tiros.comprimento, 1);
-                    glVertex3f(tiros[i].x, tiros[i].y + tamanho_tiros.comprimento, 1);
-                glEnd();
-            }
+    if(menuAtivado){
+        //opAtivado = false;
+        //insAtivado = false;
+        glClearColor(0, 0, 0, 1);
+        menuPrincipal();
+    }
+
+    if(insAtivado){
+        menuAtivado = false;
+        glClearColor(0, 0, 0, 1);
+        if(useMouse == false){
+            instructions1();
         }
-    //Desenhar inimigos
-    glColor3f(1, 0, 0);
-    //if(nivel == 1){
-        for(int i = 0; i < quantidade_inimigos; i++){
-            if(!inimigos[i].colidiu){
-                glBegin(GL_POLYGON);
-                    glVertex3f(inimigos[i].x, inimigos[i].y, 1);
-                    glVertex3f(inimigos[i].x + tamanho_inimigos.largura, inimigos[i].y, 1);
-                    glVertex3f(inimigos[i].x + tamanho_inimigos.largura, inimigos[i].y + tamanho_inimigos.comprimento, 1);
-                    glVertex3f(inimigos[i].x, inimigos[i].y + tamanho_inimigos.comprimento, 1);
-                glEnd();
-            }
+        if(useMouse){
+            instructions2();
         }
+    }
 
+    if(opAtivado){
+        menuAtivado = false;
+        glClearColor(0, 0, 0, 1);
+        options();
+    }
+
+    if(goAtivado){
+        glClearColor(0, 0, 0, 1);
+        gameOver();
+    }
+
+    if(credAtivado){
+        glClearColor(0, 0, 0, 1);
+        credits();
+    }
+
+
+
+    else if(splashAtivado == false && menuAtivado == false && insAtivado == false && opAtivado == false && goAtivado == false && credAtivado == false){
+
+    //Background
+
+
+        glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, texturas_background[textura_background_atual].id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glPushMatrix();
+        glBegin(GL_POLYGON);
+            glTexCoord2f(0, 0);glVertex3f(0, 0, 1);
+            glTexCoord2f(1, 0);glVertex3f(500, 0, 1);
+            glTexCoord2f(1, 1);glVertex3f(500, 500, 1);
+            glTexCoord2f(0, 1);glVertex3f(0, 500, 1);
+        glEnd();
+        glPopMatrix();
+        glDisable(GL_TEXTURE_2D);
+
+        //
+
+        glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, texturas[textura_player_atual].id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        //Desenhar jogador
+        glPushMatrix();
+        glBegin(GL_POLYGON);
+            glTexCoord2f(0, 0);glVertex3f(posicao_player.x, posicao_player.y, 1);
+            glTexCoord2f(1, 0);glVertex3f(posicao_player.x + tamanho_player.largura, posicao_player.y, 1);
+            glTexCoord2f(1, 1);glVertex3f(posicao_player.x + tamanho_player.largura, posicao_player.y + tamanho_player.comprimento, 1);
+            glTexCoord2f(0, 1);glVertex3f(posicao_player.x, posicao_player.y + tamanho_player.comprimento, 1);
+        glEnd();
+        glPopMatrix();
+
+        glDisable(GL_TEXTURE_2D);
+
+        //Desenhar explosoes
+        for(int k = 0; k < inimigos_mortos; k++){
+                if(explosoes[k].tempo < tempo_opacidade_maxima){
+                    if(explosoes[k].tempo < 10){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[0].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    else if(explosoes[k].tempo < 20){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[1].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    else if(explosoes[k].tempo < 30){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[2].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    else if(explosoes[k].tempo < 40){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[3].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    else if(explosoes[k].tempo < 50){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[4].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    glPushMatrix();
+                    glColor3f(1, 1, 1);
+                    glBegin(GL_POLYGON);
+                        glTexCoord2f(0, 0);glVertex3f(explosoes[k].x, explosoes[k].y, 1);
+                        glTexCoord2f(1, 0);glVertex3f(explosoes[k].x + tamanho_inimigos.largura, explosoes[k].y, 1);
+                        glTexCoord2f(1, 1);glVertex3f(explosoes[k].x + tamanho_inimigos.largura, explosoes[k].y + tamanho_inimigos.comprimento, 1);
+                        glTexCoord2f(0, 1);glVertex3f(explosoes[k].x, explosoes[k].y + tamanho_inimigos.comprimento, 1);
+                    glEnd();
+                    glPopMatrix();
+                    glDisable(GL_TEXTURE_2D);
+                }
+            }
+
+        //Desenhar tiros
+        //glColor3f(0, 0, 0);
+            glColor3f(1, 0.58, 0);
+            for(int i = 0; i < quantidade_tiros; i++){
+                //condição para o programa não desenhar o tiro sempre para não perder tanto desempenho
+                if(!tiros[i].y < 500){
+                    glBegin(GL_POLYGON);
+                        glVertex3f(tiros[i].x, tiros[i].y, 1);
+                        glVertex3f(tiros[i].x + tamanho_tiros.largura, tiros[i].y, 1);
+                        glVertex3f(tiros[i].x + tamanho_tiros.largura, tiros[i].y + tamanho_tiros.comprimento, 1);
+                        glVertex3f(tiros[i].x, tiros[i].y + tamanho_tiros.comprimento, 1);
+                    glEnd();
+                }
+            }
+
+
+
+        glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, texturas_inimigos[textura_inimigo_atual].id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glPushMatrix();
+        //Desenhar inimigos
         glColor3f(1, 1, 1);
-        for(int i = 0; i < quantidade_tiros_inimigos; i++){
-            //condição para o programa não desenhar o tiro sempre para não perder tanto desempenho
-            if(tiros_inimigos[i].y > 0){
-                glBegin(GL_POLYGON);
-                    glVertex3f(tiros_inimigos[i].x, tiros_inimigos[i].y, 1);
-                    glVertex3f(tiros_inimigos[i].x + tamanho_tiros.largura, tiros_inimigos[i].y, 1);
-                    glVertex3f(tiros_inimigos[i].x + tamanho_tiros.largura, tiros_inimigos[i].y + tamanho_tiros.comprimento, 1);
-                    glVertex3f(tiros_inimigos[i].x, tiros_inimigos[i].y + tamanho_tiros.comprimento, 1);
-                glEnd();
+        //if(nivel == 1){
+            for(int i = 0; i < quantidade_inimigos; i++){
+                if(!inimigos[i].colidiu){
+                    glBegin(GL_POLYGON);
+                        glTexCoord2f(0, 0);glVertex3f(inimigos[i].x, inimigos[i].y, 1);
+                        glTexCoord2f(1, 0);glVertex3f(inimigos[i].x + tamanho_inimigos.largura, inimigos[i].y, 1);
+                        glTexCoord2f(1, 1);glVertex3f(inimigos[i].x + tamanho_inimigos.largura, inimigos[i].y + tamanho_inimigos.comprimento, 1);
+                        glTexCoord2f(0, 1);glVertex3f(inimigos[i].x, inimigos[i].y + tamanho_inimigos.comprimento, 1);
+                    glEnd();
+                }
+            }
+            glPopMatrix();
+            glDisable(GL_TEXTURE_2D);
+
+            //Desenhar tiros inimigos
+
+            glColor3f(1, 0.57, 0);
+            for(int i = 0; i < quantidade_tiros_inimigos; i++){
+                //condição para o programa não desenhar o tiro sempre para não perder tanto desempenho
+                if(tiros_inimigos[i].y > 0){
+                    glBegin(GL_POLYGON);
+                        glVertex3f(tiros_inimigos[i].x, tiros_inimigos[i].y, 1);
+                        glVertex3f(tiros_inimigos[i].x + tamanho_tiros.largura, tiros_inimigos[i].y, 1);
+                        glVertex3f(tiros_inimigos[i].x + tamanho_tiros.largura, tiros_inimigos[i].y + tamanho_tiros.comprimento, 1);
+                        glVertex3f(tiros_inimigos[i].x, tiros_inimigos[i].y + tamanho_tiros.comprimento, 1);
+                    glEnd();
+                }
+            }
+
+            //Vida
+
+            glColor3f(1, 1, 1);
+            glRasterPos2f(420, 485);
+            char texto_vida[30] = "Health: ";
+            char vida_string[10];
+            sprintf(vida_string, "%.2f", vida_player_inicial);
+
+            strcat(texto_vida, vida_string);
+
+            for(int i = 0; i < strlen(texto_vida); i++){
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, texto_vida[i]);
+            }
+
+            //Pontuacao
+
+            glColor3f(1, 1, 1);
+            glRasterPos2f(0, 485);
+            char texto_pontuacao[] = "Score: ";
+            char pontuacao_string[20];
+            sprintf(pontuacao_string, "%d", pontuacao);
+
+            strcat(texto_pontuacao, pontuacao_string);
+
+            for(int j = 0; j < strlen(texto_pontuacao); j++){
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, texto_pontuacao[j]);
+            }
+
+            //
+
+            //Nivel
+
+            glColor3f(1, 1, 1);
+            glRasterPos2f(230, 485);
+            char texto_nivel[] = "Level: ";
+            char level_string[8];
+            sprintf(level_string, "%d", nivel);
+
+            strcat(texto_nivel, level_string);
+
+            for(int j = 0; j < strlen(texto_nivel); j++){
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, texto_nivel[j]);
+            }
+            //
+
+            /*for(int k = 0; k < inimigos_mortos; k++){
+                if(explosoes[k].tempo < tempo_opacidade_maxima){
+                    if(explosoes[k].tempo < 10){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[0].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    else if(explosoes[k].tempo < 20){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[1].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    else if(explosoes[k].tempo < 30){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[2].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    else if(explosoes[k].tempo < 40){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[3].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    else if(explosoes[k].tempo < 50){
+                        glEnable(GL_TEXTURE_2D);
+                            glBindTexture(GL_TEXTURE_2D, texturas_explosao[4].id);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                    glPushMatrix();
+                    glColor3f(1, 1, 1);
+                    glBegin(GL_POLYGON);
+                        glTexCoord2f(0, 0);glVertex3f(explosoes[k].x, explosoes[k].y, 1);
+                        glTexCoord2f(1, 0);glVertex3f(explosoes[k].x + tamanho_inimigos.largura, explosoes[k].y, 1);
+                        glTexCoord2f(1, 1);glVertex3f(explosoes[k].x + tamanho_inimigos.largura, explosoes[k].y + tamanho_inimigos.comprimento, 1);
+                        glTexCoord2f(0, 1);glVertex3f(explosoes[k].x, explosoes[k].y + tamanho_inimigos.comprimento, 1);
+                    glEnd();
+                    glPopMatrix();
+                    glDisable(GL_TEXTURE_2D);
+                }
+            }*/
+            if(paused){
+                glClearColor(0, 0, 0, 1);
+                telaPause();
+            }
+            if(intervalo_cheat > 0){
+                if(cheat == true){
+                    cheatActivated();
+                }
+                else{
+                    cheatDesactivated();
+                }
             }
         }
+
+        //
 
     glutSwapBuffers();
 
 }
 
-
-void redimensiona(int w, int h) {
-    glViewport(0, 0, w, h);
+/*void redimensiona(int w, int h) {
+    //glViewport(0, 0, w, h);
+    glViewport(0, 0, 800, 640);
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
+    //glOrtho(0, 500, 0, 500, -1, 1);
     glOrtho(0, 500, 0, 500, -1, 1);
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+}*/
+
+void redimensiona(int width, int height) {
+ glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, LARGURA_DO_MUNDO, 0, ALTURA_DO_MUNDO, -1, 1);
+
+    float razaoAspectoJanela = ((float)width)/height;
+    float razaoAspectoMundo = ((float) LARGURA_DO_MUNDO)/ ALTURA_DO_MUNDO;
+    // se a janela está menos larga do que o mundo (16:9)...
+    if (razaoAspectoJanela < razaoAspectoMundo) {
+        // vamos colocar barras verticais (acima e abaixo)
+        float hViewport = width / razaoAspectoMundo;
+        float yViewport = (height - hViewport)/2;
+        glViewport(0, yViewport, width, hViewport);
+    }
+    // se a janela está mais larga (achatada) do que o mundo (16:9)...
+    else if (razaoAspectoJanela > razaoAspectoMundo) {
+        // vamos colocar barras horizontais (esquerda e direita)
+        float wViewport = ((float)height) * razaoAspectoMundo;
+        float xViewport = (width - wViewport)/2;
+        glViewport(xViewport, 0, wViewport, height);
+    } else {
+        glViewport(0, 0, width, height);
+    }
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -242,132 +643,219 @@ void redimensiona(int w, int h) {
 
 void teclado(unsigned char key, int x, int y) {
    switch(key) {
+    case 'G':
+        quantidade_letras_trapaca++;
+        trapaca = (char*) realloc(trapaca, (quantidade_letras_trapaca + 1) * sizeof(char));
+        strcat(trapaca, "G");
+        break;
+    case 'L':
+        quantidade_letras_trapaca++;
+        trapaca = (char*) realloc(trapaca, (quantidade_letras_trapaca + 1) * sizeof(char));
+        strcat(trapaca, "L");
+        break;
+    case 'E':
+        quantidade_letras_trapaca++;
+        trapaca = (char*) realloc(trapaca, (quantidade_letras_trapaca + 1) * sizeof(char));
+        strcat(trapaca, "E");
+        break;
+    case 'N':
+        quantidade_letras_trapaca++;
+        trapaca = (char*) realloc(trapaca, (quantidade_letras_trapaca + 1) * sizeof(char));
+        strcat(trapaca, "N");
+        break;
+    case 'D':
+        quantidade_letras_trapaca++;
+        trapaca = (char*) realloc(trapaca, (quantidade_letras_trapaca + 1) * sizeof(char));
+        strcat(trapaca, "D");
+        break;
+    case 'R':
+        quantidade_letras_trapaca++;
+        trapaca = (char*) realloc(trapaca, (quantidade_letras_trapaca + 1) * sizeof(char));
+        strcat(trapaca, "R");
+        break;
+    case 'c':
+        if(cheat == true){
+            cheat = false;
+        }
+        else{
+            cheat = true;
+        }
+        break;
+    case '1': // Iniciar o jogo
+        menuAtivado = false;
+        opAtivado = false;
+        insAtivado = false;
+        paused = false;
+        //inicializa();
+        break;
+
+    case '5': // Usar o mouse
+        useMouse = true;
+        break;
+
+    case '6': //Usar o teclado
+        useMouse = false;
+        break;
+
+    case 'm': // Ir ao menu principal
+        opAtivado = false;
+        insAtivado = false;
+        menuAtivado = true;
+        paused = false;
+        break;
+
+    case 'o': // Ir às opções
+        //if(menuAtivado){
+            opAtivado = true;
+            menuAtivado = false;
+            insAtivado = false;
+            paused = false;
+        //}
+        break;
+
+    case 'i': // Ir às instruções
+        //if(menuAtivado){
+            insAtivado = true;
+            opAtivado = false;
+            menuAtivado = false;
+            paused = false;
+        //}
+        break;
+
+    case 13: // Enter no inicio para ir ao menu principal
+        menuAtivado = true;
+        splashAtivado = false;
+        paused = false;
+        break;
+
+
       // Tecla ESC
       case 27:
-         free(tiros);
-         free(inimigos);
-         free(posicao_inimigos);
-         exit(0);
+         goAtivado = true;
+         splashAtivado = false;
+         menuAtivado = false;
+         opAtivado = false;
+         insAtivado = false;
+         paused = false;
+         esc++;
+         if(esc == 2 && isPlayerDead == false){
+            credAtivado = true;
+            goAtivado = false;
+         }
+
+         if(esc == 3 && isPlayerDead == false){
+
+             free(tiros);
+             free(inimigos);
+             free(posicao_inimigos);
+             free(explosoes);
+             exit(0);
+         }
+         if(esc == 1 && isPlayerDead == true){
+            goAtivado = false;
+            inicializa();
+            isPlayerDead = false;
+            esc = 0;
+         }
          break;
+
       case 100: //Tecla "d" - Vai para direita
-        if(posicao_player.x < 490 && paused == false){
-            posicao_player.x += tamanho_player.largura;
-        }
+          if(useMouse == false){
+            if(posicao_player.x < 480 && paused == false){
+                posicao_player.x += tamanho_player.largura;
+            }
+          }
         break;
+
       case 97: //Tecla "a" - Vai para esquerda
-        if(posicao_player.x > 0 && paused == false){
-            posicao_player.x -= tamanho_player.largura;
-        }
+          if(useMouse == false){
+            if(posicao_player.x > 0 && paused == false){
+                posicao_player.x -= tamanho_player.largura;
+            }
+          }
         break;
-      case 32: //Tecla "Espaço" - Atira
-          if(paused == false){
-              quantidade_tiros++;
-              tiros = (Posicao *) realloc(tiros, (quantidade_tiros+4) * sizeof(Posicao));
-              tiros[quantidade_tiros-1].x = posicao_player.x + (tamanho_player.largura)/2;
-              tiros[quantidade_tiros - 1].y = posicao_player.y + tamanho_player.comprimento;
+
+      case 32: //Tecla "Espaço" - Atira //32
+          if(useMouse == false){
+              if(paused == false){
+                    if(intervalo_tiros == 0 || cheat == true){
+                      intervalo_tiros = 30;
+                      quantidade_tiros++;
+                      tiros = (Posicao *) realloc(tiros, (quantidade_tiros+4) * sizeof(Posicao));
+                      tiros[quantidade_tiros-1].x = posicao_player.x - 1 + (tamanho_player.largura)/2;
+                      tiros[quantidade_tiros - 1].y = posicao_player.y + tamanho_player.comprimento;
+                      //iniciar_musica("laser_shot.wav");
+                    }
+              }
           }
           break;
+
+
       case 114: // Tecla "r" - Reinicia o jogo
         inicializa();
         break;
-      case 50: //Tecla "2" - Dá dois tiros ao mesmo tempo
+
+      case 50: //Tecla "2" - Dá dois tiros ao mesmo tempo //50
         if(paused == false){
-            quantidade_tiros += 2;
-            tiros = (Posicao *) realloc(tiros, (quantidade_tiros + 7) * sizeof(Posicao));
-            tiros[quantidade_tiros-2].x = posicao_player.x;
-            tiros[quantidade_tiros - 2].y = posicao_player.y + tamanho_player.comprimento;
-            tiros[quantidade_tiros - 1].x = posicao_player.x + tamanho_player.largura - tamanho_tiros.largura;
-            tiros[quantidade_tiros - 1].y = posicao_player.y + tamanho_player.comprimento;
+            if(intervalo_tiros == 0 || cheat == true){
+                intervalo_tiros = 30;
+                quantidade_tiros += 2;
+                tiros = (Posicao *) realloc(tiros, (quantidade_tiros + 2) * sizeof(Posicao));
+                tiros[quantidade_tiros-2].x = posicao_player.x + 3;
+                tiros[quantidade_tiros - 2].y = posicao_player.y + tamanho_player.comprimento;
+                tiros[quantidade_tiros - 1].x = posicao_player.x + tamanho_player.largura - tamanho_tiros.largura - 3;
+                tiros[quantidade_tiros - 1].y = posicao_player.y + tamanho_player.comprimento;
+            }
         }
         break;
+
+
       case 112: //Tecla "p" - Pausa ou despausa o jogo
-        if(paused == true){
-            paused = false;
-        }
-        else{
-            paused = true;
+        if(splashAtivado == false && menuAtivado == false && insAtivado == false && opAtivado == false && goAtivado == false && credAtivado == false){
+            if(paused == true){
+                paused = false;
+            }
+            else{
+                paused = true;
+            }
         }
       default:
          break;
    }
+   glutPostRedisplay();
 }
 
-/*void movimenta_inimigos(){
-    for(int i = 0; i < quantidade_inimigos; i++){
-        if(inimigos[i].colidiu == false){
-            //printf("Que y: %.2f\n", inimigos[i].y);
-            if(inimigos[i].y == 450){
-                inimigos[i].x -= tamanho_inimigos.largura/2;
-                if(inimigos[i].x >= 2 && inimigos[i].x <= 8){
-                    inimigos[i].y -= tamanho_inimigos.comprimento/2;
-                    inimigos[i].esquerdaDireita = 1;//agora vai para direita
-                    inimigos[i].faltaPara45 -= tamanho_inimigos.comprimento/2;
-                    inimigos[i].jaMoveuParaBaixo = 1;
-                }
-            }
-            else if(inimigos[i].y == 390){
-                inimigos[i].x += tamanho_inimigos.largura/2;
-                if(inimigos[i].x >= 482 && inimigos[i].x <= 488){
-                    inimigos[i].y -= tamanho_inimigos.comprimento/2;
-                    inimigos[i].esquerdaDireita = 0;
-                    inimigos[i].faltaPara45 -= tamanho_inimigos.comprimento/2;
-                    inimigos[i].jaMoveuParaBaixo = 1;
-                }
-            }
-            else if((inimigos[i].y + tamanho_inimigos.largura <= tamanho_player.comprimento && inimigos[i].y > 0) && (inimigos[i].x <= posicao_player.x + tamanho_player.largura && inimigos[i].x + tamanho_inimigos.largura >= posicao_player.x + tamanho_player.largura || inimigos[i].x + tamanho_inimigos.largura >= posicao_player.x && inimigos[i].x + tamanho_inimigos.largura <= posicao_player.x + tamanho_player.largura)){
-                    quantidade_tiros = 0;
-                    quantidade_tiros_inimigos = 0;
-                    tiros = (Posicao*) realloc(tiros, 2 * sizeof(Posicao));
-                    inimigos = (Inimigo*) realloc(inimigos, (quantidade_inimigos + 1) * sizeof(Inimigo));
-                    inimigos_mortos = 0;
-                    inicializa();
-            }
-            else if(inimigos[i].y <= 0){
-                    quantidade_tiros = 0;
-                    quantidade_tiros_inimigos = 0;
-                    tiros = (Posicao*) realloc(tiros, 2 * sizeof(Posicao));
-                    inimigos = (Inimigo*) realloc(inimigos, (quantidade_inimigos + 1) * sizeof(Inimigo));
-                    inimigos_mortos = 0;
-                    inicializa();
-            }
-            else{
-                if(inimigos[i].faltaPara45 > 0 && inimigos[i].jaMoveuParaBaixo == 1){
-                    if(inimigos[i].faltaPara45 > 3){
-                        inimigos[i].faltaPara45 -= tamanho_inimigos.comprimento/2;
-                        inimigos[i].y -= tamanho_inimigos.comprimento/2;
-                    }
-                    else{
-                        inimigos[i].y -= 3;
-                        inimigos[i].faltaPara45 -= 3;
-                    }
-                }
-                else{
-                    if(inimigos[i].esquerdaDireita == 0){
-                        inimigos[i].x -= tamanho_inimigos.largura/2;
-                        if(inimigos[i].x >= 2 && inimigos[i].x <= 8){
-                            inimigos[i].esquerdaDireita =1;
-                            inimigos[i].faltaPara45 = 45;
-                            inimigos[i].jaMoveuParaBaixo = 1;
-                        }
-                    }
-                    else{
-                        inimigos[i].x += tamanho_inimigos.largura/2;
-                        if(inimigos[i].x >= 482 && inimigos[i].x <= 488){
-                            inimigos[i].esquerdaDireita = 0;
-                            inimigos[i].faltaPara45 = 45;
-                            inimigos[i].jaMoveuParaBaixo = 1;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}*/
+void carregar_texturas(){
+    texturas[0].id = carregaTextura(texturas[0].arquivo);
+    texturas[1].id = carregaTextura(texturas[1].arquivo);
+    texturas[2].id = carregaTextura(texturas[2].arquivo);
+    texturas[3].id = carregaTextura(texturas[3].arquivo);
+    texturas_inimigos[0].id = carregaTextura(texturas_inimigos[0].arquivo);
+    texturas_inimigos[1].id = carregaTextura(texturas_inimigos[1].arquivo);
+    texturas_inimigos[2].id = carregaTextura(texturas_inimigos[2].arquivo);
+    texturas_inimigos[3].id = carregaTextura(texturas_inimigos[3].arquivo);
+    texturas_inimigos[4].id = carregaTextura(texturas_inimigos[4].arquivo);
+    texturas_inimigos[5].id = carregaTextura(texturas_inimigos[5].arquivo);
+    texturas_inimigos[6].id = carregaTextura(texturas_inimigos[6].arquivo);
+    texturas_inimigos[7].id = carregaTextura(texturas_inimigos[7].arquivo);
+    texturas_inimigos[8].id = carregaTextura(texturas_inimigos[8].arquivo);
+    texturas_inimigos[9].id = carregaTextura(texturas_inimigos[9].arquivo);
+    texturas_inimigos[10].id = carregaTextura(texturas_inimigos[10].arquivo);
+    texturas_inimigos[11].id = carregaTextura(texturas_inimigos[11].arquivo);
+    texturas_background[0].id = carregaTextura(texturas_background[0].arquivo);
+    texturas_background[1].id = carregaTextura(texturas_background[1].arquivo);
+    texturas_background[2].id = carregaTextura(texturas_background[2].arquivo);
+    texturas_explosao[0].id = carregaTextura(texturas_explosao[0].arquivo);
+    texturas_explosao[1].id = carregaTextura(texturas_explosao[1].arquivo);
+    texturas_explosao[2].id = carregaTextura(texturas_explosao[2].arquivo);
+    texturas_explosao[3].id = carregaTextura(texturas_explosao[3].arquivo);
+    texturas_explosao[4].id = carregaTextura(texturas_explosao[4].arquivo);
+    textura_splashscreen[0].id = carregaTextura(textura_splashscreen[0].arquivo);
+}
 
 void movimenta_inimigos(){ //movimenta_inimigos com variação do tamanho do inimigo
     for(int i = 0; i < quantidade_inimigos; i++){
         if(inimigos[i].colidiu == false){
-            //printf("Que y: %.2f\n", inimigos[i].y);
             if((inimigos[i].y + tamanho_inimigos.largura <= tamanho_player.comprimento && inimigos[i].y > 0 || inimigos[i].y < tamanho_player.comprimento) && (inimigos[i].x <= posicao_player.x + tamanho_player.largura && inimigos[i].x + tamanho_inimigos.largura >= posicao_player.x + tamanho_player.largura || inimigos[i].x + tamanho_inimigos.largura >= posicao_player.x && inimigos[i].x + tamanho_inimigos.largura <= posicao_player.x + tamanho_player.largura)){
                     quantidade_tiros = 0;
                     quantidade_tiros_inimigos = 0;
@@ -427,27 +915,41 @@ void movimenta_tiros(){ //movimenta_tiros com colisão
                     if(tiros[i].x >= inimigos[j].x && tiros[i].x <= inimigos[j].x + tamanho_inimigos.largura || tiros[i].x + tamanho_tiros.largura >= inimigos[j].x && tiros[i].x + tamanho_tiros.largura <= inimigos[j].x + tamanho_inimigos.largura){
                         tiros[i].y = 500;
                         inimigos[j].colidiu = true;
+                        //inimigos[j].y = 550;
+                        //inimigos[j].x = -30;
+                        //inimigos_mortos++;
+
+                        //
+
+                        explosoes[inimigos_mortos].x = inimigos[j].x;
+                        explosoes[inimigos_mortos].y = inimigos[j].y;
+                        explosoes[inimigos_mortos].tempo = 0;
+                        inimigos_mortos++;
                         inimigos[j].y = 550;
                         inimigos[j].x = -30;
-                        inimigos_mortos++;
-                        printf("Inimigos mortos: %d\n", inimigos_mortos);
-                        printf("Quantidade de inimigos vivos restantes: %d\n", quantidade_inimigos - inimigos_mortos);
-                        printf("Quantidade de tiros inimigo: %d\n", quantidade_tiros_inimigos);
+                        explosoes = (Explosao*) realloc(explosoes, (inimigos_mortos + 1) * sizeof(Explosao));
+
+                        //
+
                         if(inimigos_mortos == quantidade_inimigos){
                             quantidade_inimigos++; //próxima fase
                             inimigos_mortos = 0;
                             quantidade_tiros_inimigos = 0;
-                            printf("nivel: %d\n", nivel);
                             nivel++;
-                            tiros = (Posicao*) realloc(tiros, 2 * sizeof(Posicao));
+                            dano_inimigo *= 1.05;
+                            tiros = (Posicao*) realloc(tiros, 1 * sizeof(Posicao));
                             //inimigos = (Posicao*) realloc (inimigos, (quantidade_inimigos + 1) * sizeof(Posicao));
 
                             quantidade_tiros = 0;
                             tamanhoInimigo -= VARIACAO_TAMANHO_INIMIGOS;
                             tempo_tiro -= 2; //tempo dos tiros inimigos
                             variacao_nivel += 0.05; //velocidade dos tiros inimigos
-                            inicializa();
-                            if(quantidade_inimigos >= NUM_MAX_INIMIGOS){ //limite da quantidade de inimigos
+
+                            if(pont_fase - tempo > 0){
+                                pontuacao += pont_fase - tempo;
+                            }
+
+                            if(quantidade_inimigos == NUM_MAX_INIMIGOS){ //limite da quantidade de inimigos
                                 quantidade_inimigos = NUM_MAX_INIMIGOS-1;
                             }
                             if(tempo_tiro <= 50){ //limite do tempo dos tiros dos inimigos
@@ -456,7 +958,10 @@ void movimenta_tiros(){ //movimenta_tiros com colisão
                             if(tamanhoInimigo < TAMANHO_MINIMO_INIMIGOS){ //Limite do tamanho do inimigo
                                 tamanhoInimigo = TAMANHO_MINIMO_INIMIGOS;
                             }
-                            inimigos = (Inimigo*) realloc (inimigos, (quantidade_inimigos + 1) * sizeof(Inimigo));
+                            inimigos = (Inimigo*) realloc (inimigos, (quantidade_inimigos) * sizeof(Inimigo));
+                            explosoes = (Explosao*) realloc(explosoes, 1 * sizeof(Explosao));
+                            tiros_inimigos = (Posicao*) realloc(tiros_inimigos, 1 * sizeof(Posicao));
+                            inicializa();
                         }
                     }
                 }
@@ -466,21 +971,26 @@ void movimenta_tiros(){ //movimenta_tiros com colisão
     }
 }
 
-
-
 void movimenta_tiros_inimigos(){
     if(quantidade_tiros_inimigos >= 0){
         for(int i = 0; i < quantidade_tiros_inimigos; i++){
             if(tiros_inimigos[i].y == tamanho_player.comprimento || tiros_inimigos[i].y >= 0 && tiros_inimigos[i].y <= tamanho_player.comprimento){
                 if(tiros_inimigos[i].x >= posicao_player.x && tiros_inimigos[i].x <= posicao_player.x + tamanho_player.largura || tiros_inimigos[i].x + tamanho_tiros.largura >= posicao_player.x && tiros_inimigos[i].x <= posicao_player.x + tamanho_player.largura){
+                    vida_player_inicial -= dano_inimigo;
                     tiros_inimigos[i].colidiu = true;
-                    quantidade_tiros_inimigos = 0;
-                    quantidade_tiros = 0;
-                    inimigos_mortos = 0;
-                    tiros = (Posicao*) realloc(tiros, 2 * sizeof(Posicao));
-                    tiros_inimigos = (Posicao*) realloc(tiros_inimigos, 1 * sizeof(Posicao));
-                    inimigos = (Inimigo*) realloc(inimigos, (quantidade_inimigos + 3)* sizeof(Inimigo));
-                    inicializa();
+                    tiros_inimigos[i].y = -10;
+                    if(vida_player_inicial <= 0){
+                        goAtivado = true;
+                        isPlayerDead = true;
+                        tiros_inimigos[i].colidiu = true;
+                        quantidade_tiros_inimigos = 0;
+                        quantidade_tiros = 0;
+                        inimigos_mortos = 0;
+                        tiros = (Posicao*) realloc(tiros, 2 * sizeof(Posicao));
+                        tiros_inimigos = (Posicao*) realloc(tiros_inimigos, 1 * sizeof(Posicao));
+                        inimigos = (Inimigo*) realloc(inimigos, (quantidade_inimigos + 3)* sizeof(Inimigo));
+                        inicializa();
+                    }
                 }
                 else{
                     tiros_inimigos[i].y -= (variacao_nivel * tamanho_tiros.comprimento);
@@ -493,13 +1003,60 @@ void movimenta_tiros_inimigos(){
     }
 }
 
+void teclasEspeciais(int key, int x, int y){
+    if(key == GLUT_KEY_RIGHT){
+        if(posicao_player.x < 480 && paused == false){
+            posicao_player.x += tamanho_player.largura;
+        }
+    }
+    if(key == GLUT_KEY_LEFT){
+        if(posicao_player.x > 0 && paused == false){
+            posicao_player.x -= tamanho_player.largura;
+        }
+    }
+    glutPostRedisplay();
+}
+
+void gerenciaMouse(int button, int state, int x, int y){
+    if(useMouse == true){
+        if(button == GLUT_MIDDLE_BUTTON){
+            if(paused == false){
+                if(intervalo_tiros == 0 || cheat == true){
+                    intervalo_tiros = 30;
+                    quantidade_tiros++;
+                    tiros = (Posicao*) realloc(tiros, (quantidade_tiros + 4) * sizeof(Posicao));
+                    tiros[quantidade_tiros - 1].x = posicao_player.x + (tamanho_player.largura/2);
+                    tiros[quantidade_tiros - 1].y = posicao_player.y + tamanho_player.comprimento;
+                }
+            }
+        }
+        if(button == GLUT_RIGHT_BUTTON){
+            if(posicao_player.x < 480 && paused == false){
+                posicao_player.x += tamanho_player.largura;
+            }
+        }
+        if(button == GLUT_LEFT_BUTTON){
+            if(posicao_player.x > 0 && paused == false){
+                posicao_player.x -= tamanho_player.largura;
+            }
+        }
+    }
+    glutPostRedisplay();
+}
+
 void atualizaCena(int periodo) {
     // Pede ao GLUT para redesenhar a tela, assim que possível
     int variavel_controle = 0, todos_tiros_inimigos_sairam = 0, tiros_inimigos_sairam = 0;
-    if(paused == false){
-        glutKeyboardFunc(teclado);
+    if(paused == false && splashAtivado == false && menuAtivado == false && insAtivado == false && opAtivado == false && goAtivado == false && credAtivado == false){
+        //glutKeyboardFunc(teclado);
         movimenta_tiros();
         tempo++;
+        if(intervalo_tiros > 0){
+            intervalo_tiros--;
+        }
+        if(intervalo_cheat > 0){
+            intervalo_cheat--;
+        }
         if(tempo > 0){
             if(primeiro_tiro == 0){
                 primeiro_tiro =1;
@@ -525,17 +1082,346 @@ void atualizaCena(int periodo) {
                     }
                 }
             }
-            if(tempo % 5 == 0){ //20
+            if(tempo % 20 == 0){ //20
                 movimenta_inimigos();
             }
         }
         movimenta_tiros_inimigos(); //Descomentar
+
+
+        if(tempo % tempo_animacao_player == 0){
+            textura_player_atual++;
+            if(textura_player_atual == quantidade_textura_player){
+                textura_player_atual = 0;
+            }
+        }
+
+        if(tempo % tempo_animacao_inimigo == 0){
+            textura_inimigo_atual++;
+            if(textura_inimigo_atual > 11){
+                textura_inimigo_atual = 0;
+            }
+        }
+
+        if(tempo % tempo_animacao_background == 0){
+            textura_background_atual++;
+            if(textura_background_atual == 3){
+                textura_background_atual = 0;
+            }
+        }
+
+        for(int k = 0; k < inimigos_mortos; k++){
+            if(explosoes[k].tempo < tempo_opacidade_maxima + 5){
+                explosoes[k].tempo++;
+            }
+        }
+
+        printf("Trapa: %s\n", trapaca);
+        if(strstr(trapaca, "GLENDER") != NULL){
+            if(cheat == true){
+                quantidade_letras_trapaca = 0;
+                trapaca = (char*) realloc(trapaca, 1 * sizeof(char));
+                strcpy(trapaca, "");
+                intervalo_cheat = 100;
+                cheat = false;
+            }
+            else{
+                quantidade_letras_trapaca = 0;
+                trapaca = (char*) realloc(trapaca, 1 * sizeof(char));
+                strcpy(trapaca, "");
+                intervalo_cheat = 100;
+                cheat = true;
+            }
+        }
+
         glutPostRedisplay();
     }
     //glutPostRedisplay();
 
     // Se registra novamente, para que fique sempre sendo chamada (30 FPS)
     glutTimerFunc(periodo, atualizaCena, periodo);
+}
+
+
+
+void menuPrincipal(){
+
+    char texto1[]="START MENU";
+    char texto2[]="[1] START GAME / CONTINUE GAME";
+    char texto3[]="[ESC] QUIT GAME";
+    char texto4[]="[i] INSTRUCTIONS";
+    char texto5[]="[o] OPTIONS";
+
+    int unsigned i = 0;
+    glColor3f(0,0,1);
+    glRasterPos3f(185,400,1);
+    for(i=0;i<=strlen(texto1);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto1[i]);
+    }
+
+    glColor3f(0, 1, 1);
+    glRasterPos3f(86,310,1);
+    for(i=0;i<=strlen(texto2);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto2[i]);
+    }
+    glRasterPos3f(170,260,1);
+    for(i=0;i<=strlen(texto3);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto3[i]);
+    }
+    glRasterPos3f(168,210,1);
+    for(i=0;i<=strlen(texto4);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto4[i]);
+    }
+    glRasterPos3f(192,160,1);
+    for(i=0;i<=strlen(texto5);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto5[i]);
+    }
+     //glutPostRedisplay();
+}
+
+void instructions1(){//Instruções se o teclado estiver sendo usado (default)
+    char texto1[]="INSTRUCTIONS";
+    char texto2[] = "[SPACE] SHOOT";
+    char texto4[]="[RIGHT] OR [a] MOVE RIGHT";
+    char texto5[]="[LEFT] OR [d] MOVE LEFT";
+    char texto6[]="[p] PAUSE GAME";
+    char texto7[]="[r] RESTART GAME";
+    char texto8[]="[m] RETURN TO START MENU";
+    char texto9[]="[1] START GAME / CONTINUE GAME";
+    int unsigned i = 0;
+    glColor3f(0,0,1);
+    glRasterPos3f(178,400,1);
+    for(i=0;i<=strlen(texto1);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto1[i]);
+    }
+
+    glColor3f(0, 1, 1);
+    glRasterPos3f(178, 340,1);
+    for(i=0;i<=strlen(texto2);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto2[i]);
+    }
+    glRasterPos3f(120, 300,1);
+    for(i=0;i<=strlen(texto4);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto4[i]);
+    }
+    glRasterPos3f(135, 260,1);
+    for(i=0;i<=strlen(texto5);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto5[i]);
+    }
+    glRasterPos3f(175, 220,1);
+    for(i=0;i<=strlen(texto6);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto6[i]);
+    }
+    glRasterPos3f(165, 180,1);
+    for(i=0;i<=strlen(texto7);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto7[i]);
+    }
+    glRasterPos3f(113, 140,1);
+    for(i=0;i<=strlen(texto8);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto8[i]);
+    }
+    glRasterPos3f(88, 100,1);
+    for(i=0;i<=strlen(texto9);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto9[i]);
+    }
+     //glutPostRedisplay();
+}
+
+void instructions2(){//Intruções se o mouse for usado //2 atira double shot
+    char texto1[]="INSTRUCTIONS";
+    char texto2[]="[MIDLLE MOUSE BUTTON] SHOOT";
+    char texto3[]="[RIGHT MOUSE BUTTON] MOVE RIGHT";
+    char texto4[]="[LEFT MOUSE BUTTON] MOVE LEFT";
+    char texto5[]="[p] PAUSE GAME";
+    char texto6[]="[r] RESTART GAME";
+    char texto7[]="[m] RETURN TO START MENU";
+    char texto8[]="[1] START GAME / CONTINUE GAME";
+
+    int unsigned i = 0;
+    glColor3f(0,0,1);
+    glRasterPos3f(178,400,1);
+    for(i=0;i<=strlen(texto1);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto1[i]);
+    }
+    glColor3f(0, 1, 1);
+    glRasterPos3f(95, 340,1);
+    for(i=0;i<=strlen(texto2);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto2[i]);
+    }
+    glRasterPos3f(72, 300, 1);
+    for(i=0;i<=strlen(texto3);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto3[i]);
+    }
+    glRasterPos3f(88, 260,1);
+    for(i=0;i<=strlen(texto4);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto4[i]);
+    }
+    glRasterPos3f(175, 220,1);
+    for(i=0;i<=strlen(texto5);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto5[i]);
+    }
+    glRasterPos3f(165, 180,1);
+    for(i=0;i<=strlen(texto6);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto6[i]);
+    }
+    glRasterPos3f(113, 140,1);
+    for(i=0;i<=strlen(texto7);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto7[i]);
+    }
+    glRasterPos3f(88, 100,1);
+    for(i=0;i<=strlen(texto8);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto8[i]);
+    }
+     //glutPostRedisplay();
+
+}
+
+void credits(){
+    char texto1[]="Credits";
+    char texto2[] = "Pedro Vitor Melo Bitencourt";
+    char texto4[] = "Rafael Pereira Duarte";
+    char texto5[] = "Pedro Veloso Inacio de Oliveira";
+    char texto6[] = "Sergio Henrique Mendes de Assis";
+    char texto3[]="Press [ESC] to continue...";
+    int unsigned i;
+    glColor3f(0,0,1);
+    glRasterPos3f(220, 400,1);
+    for(i=0;i<=strlen(texto1);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto1[i]);
+    }
+    glColor3f(1,1,1);
+    glRasterPos3f(310,10,1);
+    for(i=0;i<=strlen(texto3);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto3[i]);
+    }
+
+    glColor3f(0, 1, 1);
+    glRasterPos3f(125, 300, 1);
+    for(i = 0; i < strlen(texto5); i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto5[i]);
+    }
+
+    glColor3f(0, 1, 1);
+    glRasterPos3f(140, 270, 1);
+    for(i = 0; i < strlen(texto2); i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, texto2[i]);
+    }
+
+    glColor3f(0, 1, 1);
+    glRasterPos3f(170, 240, 1);
+    for(i = 0; i < strlen(texto4); i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto4[i]);
+    }
+
+    glColor3f(0, 1, 1);
+    glRasterPos3f(120, 210, 1);
+    for(i = 0; i < strlen(texto6); i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, texto6[i]);
+    }
+}
+
+void options(){
+    char texto1[]="OPTIONS";
+    char texto2[]="[5] Play using mouse";
+    char texto3[]="[6] Play using keyboard";//default
+    char texto4[]="[m] RETURN TO START MENU";
+    char texto5[]="[1] START GAME / CONTINUE GAME";
+    int unsigned i;
+    glColor3f(0,0,1);
+    glRasterPos3f(210,400,1);
+    for(i=0;i<=strlen(texto1);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto1[i]);
+    }
+
+    glColor3f(0, 1, 1);
+
+    glRasterPos3f(167,310,1);
+    for(i=0;i<=strlen(texto2);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto2[i]);
+    }
+
+    glRasterPos3f(160,260,1);
+    for(i=0;i<=strlen(texto3);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto3[i]);
+    }
+    glRasterPos3f(115,210,1);
+    for(i=0;i<=strlen(texto4);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto4[i]);
+    }
+    glRasterPos3f(88, 170, 1);
+    for(i=0;i<=strlen(texto5);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto5[i]);
+    }
+}
+
+void splashScreen(){
+    char texto1[]="Galaxian";
+    char texto2[]="Press [ENTER] to continue...";
+    int unsigned i;
+    glColor3f(1, 1, 1);
+    glRasterPos3f(220,300,1);
+    for(i=0;i<=strlen(texto1);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto1[i]);
+    }
+    glColor3f(1,1,1);
+    glRasterPos3f(310,10,1);
+    for(i=0;i<=strlen(texto2);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto2[i]);
+    }
+}
+
+void gameOver(){
+    char texto1[]="GAME OVER";
+    char texto2[]="Press [ESC] to continue...";
+    int unsigned i;
+    glColor3f(1,1,1);
+    glRasterPos3f(192,300,1);
+    for(i=0;i<=strlen(texto1);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto1[i]);
+    }
+    glRasterPos3f(310,10,1);
+    for(i=0;i<=strlen(texto2);i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24,texto2[i]);
+    }
+}
+
+void telaPause(){
+    char texto1[] = "PAUSED";
+    char texto2[] = "Press [p] to continue...";
+    int unsigned i;
+    glColor3f(1, 1, 1);
+    glRasterPos3f(200, 450, 1);
+
+    for(i = 0; i < strlen(texto1); i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, texto1[i]);
+    }
+
+    glRasterPos3f(350, 10, 1);
+    for(i = 0; i < strlen(texto2); i++){
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, texto2[i]);
+    }
+}
+
+void cheatActivated(){
+    char texto1[] = "Cheat activated";
+    int unsigned i;
+    glColor3f(0.5, 1.0, 0.5);
+    glRasterPos3f(0, 5, 1);
+
+    for(i = 0; i < strlen(texto1); i++){
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, texto1[i]);
+    }
+}
+
+void cheatDesactivated(){
+    char texto1[] = "Cheat desactivated";
+    int unsigned i;
+    glColor3f(1, 0, 0);
+    glRasterPos3f(0, 5, 1);
+
+    for(i = 0; i < strlen(texto1); i++){
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, texto1[i]);
+    }
 }
 
 int main(int argc, char** argv){
@@ -548,14 +1434,45 @@ int main(int argc, char** argv){
     glutInitWindowSize(800, 640);
     glutInitWindowPosition(250, 250);
     //
-    //glEnable(GL_BLEND);
-    //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     //
     glutCreateWindow("Galaxian - TP1");
+    carregar_texturas();
+    strcpy(trapaca, "");
+
+    /*texturas[0].id = carregaTextura(texturas[0].arquivo);
+    texturas[1].id = carregaTextura(texturas[1].arquivo);
+    texturas[2].id = carregaTextura(texturas[2].arquivo);
+    texturas[3].id = carregaTextura(texturas[3].arquivo);
+    texturas_inimigos[0].id = carregaTextura(texturas_inimigos[0].arquivo);
+    texturas_inimigos[1].id = carregaTextura(texturas_inimigos[1].arquivo);
+    texturas_inimigos[2].id = carregaTextura(texturas_inimigos[2].arquivo);
+    texturas_inimigos[3].id = carregaTextura(texturas_inimigos[3].arquivo);
+    texturas_inimigos[4].id = carregaTextura(texturas_inimigos[4].arquivo);
+    texturas_inimigos[5].id = carregaTextura(texturas_inimigos[5].arquivo);
+    texturas_inimigos[6].id = carregaTextura(texturas_inimigos[6].arquivo);
+    texturas_inimigos[7].id = carregaTextura(texturas_inimigos[7].arquivo);
+    texturas_inimigos[8].id = carregaTextura(texturas_inimigos[8].arquivo);
+    texturas_inimigos[9].id = carregaTextura(texturas_inimigos[9].arquivo);
+    texturas_inimigos[10].id = carregaTextura(texturas_inimigos[10].arquivo);
+    texturas_inimigos[11].id = carregaTextura(texturas_inimigos[11].arquivo);
+    texturas_background[0].id = carregaTextura(texturas_background[0].arquivo);
+    texturas_background[1].id = carregaTextura(texturas_background[1].arquivo);
+    texturas_background[2].id = carregaTextura(texturas_background[2].arquivo);
+    texturas_explosao[0].id = carregaTextura(texturas_explosao[0].arquivo);
+    texturas_explosao[1].id = carregaTextura(texturas_explosao[1].arquivo);
+    texturas_explosao[2].id = carregaTextura(texturas_explosao[2].arquivo);
+    texturas_explosao[3].id = carregaTextura(texturas_explosao[3].arquivo);
+    texturas_explosao[4].id = carregaTextura(texturas_explosao[4].arquivo);*/
+
+
     inicializa();
     glutDisplayFunc(desenha);
     glutReshapeFunc(redimensiona);
     glutKeyboardFunc(teclado);
+    glutSpecialFunc(teclasEspeciais);
+    glutMouseFunc(gerenciaMouse);
     glutTimerFunc(0,atualizaCena, 11); //11
 
 
